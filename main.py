@@ -3,6 +3,7 @@
 # =========================================
 from fastapi import FastAPI, Request, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from typing import Optional
 import asyncio
 import time
@@ -25,6 +26,27 @@ app.add_middleware(
 # username -> dict(level=int, coords=dict, frequency=float, last_update=float)
 players = {}
 INACTIVITY_TIMEOUT = 5 * 60  # 5 minutes
+
+# Middleware to block browsers
+@app.middleware("http")
+async def block_browsers(request: Request, call_next):
+    user_agent = request.headers.get("user-agent", "").lower()
+    
+    # Block all common browsers
+    browser_keywords = ["mozilla", "chrome", "safari", "firefox", "edge", "opera", "brave"]
+    
+    # Check if it's a browser (and not python-requests)
+    is_browser = any(browser in user_agent for browser in browser_keywords)
+    is_python = "python" in user_agent or "requests" in user_agent or "urllib" in user_agent
+    
+    if is_browser and not is_python:
+        return JSONResponse(
+            status_code=403,
+            content={"error": "Browser access forbidden. API access only."}
+        )
+    
+    response = await call_next(request)
+    return response
 
 @app.post("/join")
 async def join(request: Request, x_api_key: Optional[str] = Header(None)):
@@ -112,4 +134,4 @@ async def startup_event():
 # Optional root endpoint
 @app.get("/")
 async def root():
-    return {"message": "Server running"}
+    return {"message": "Server running", "note": "API access only - browsers blocked"}
