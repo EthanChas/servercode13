@@ -1,12 +1,16 @@
 # =========================================
 # Enhanced Player Server with Inactivity Check
 # =========================================
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
+from typing import Optional
 import asyncio
 import time
 
 app = FastAPI()
+
+# SECRET API KEY - Keep this private!
+API_KEY = "8KmN9pQr2tUvWxYz4aBcDeFgHiJkLmNoPqRsTuVwXyZ1"
 
 # Allow all origins
 app.add_middleware(
@@ -20,11 +24,10 @@ app.add_middleware(
 # Player storage
 # username -> dict(level=int, coords=dict, frequency=float, last_update=float)
 players = {}
-
 INACTIVITY_TIMEOUT = 5 * 60  # 5 minutes
 
 @app.post("/join")
-async def join(request: Request):
+async def join(request: Request, x_api_key: Optional[str] = Header(None)):
     """
     Player sends:
     {
@@ -34,17 +37,21 @@ async def join(request: Request):
         "frequency": 123.4
     }
     """
+    # Verify API key
+    if x_api_key != API_KEY:
+        raise HTTPException(status_code=403, detail="Invalid or missing API key")
+    
     data = await request.json()
     username = data.get("username")
     level = data.get("level")
     coords = data.get("coords")
     frequency = data.get("frequency")
-
+    
     if not all([username, level is not None, coords, frequency is not None]):
         return {"error": "Missing required fields"}
-
+    
     current_time = time.time()
-
+    
     # Check if name is taken and update or create
     if username in players:
         old = players[username]
@@ -75,10 +82,14 @@ async def join(request: Request):
         return {"message": "Player joined", "status": "new"}
 
 @app.get("/players")
-async def get_players():
+async def get_players(x_api_key: Optional[str] = Header(None)):
     """
     Return all current players
     """
+    # Verify API key
+    if x_api_key != API_KEY:
+        raise HTTPException(status_code=403, detail="Invalid or missing API key")
+    
     return {"players": players}
 
 # Background task to remove inactive players
