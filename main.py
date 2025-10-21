@@ -1,17 +1,13 @@
 # =========================================
 # Enhanced Player Server with Inactivity Check
 # =========================================
-from fastapi import FastAPI, Request, HTTPException, Header
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from typing import Optional
 import asyncio
 import time
 
 app = FastAPI()
-
-# SECRET API KEY - Keep this private!
-API_KEY = "8KmN9pQr2tUvWxYz4aBcDeFgHiJkLmNoPqRsTuVwXyZ1"
 
 # Allow all origins
 app.add_middleware(
@@ -49,7 +45,7 @@ async def block_browsers(request: Request, call_next):
     return response
 
 @app.post("/join")
-async def join(request: Request, x_api_key: Optional[str] = Header(None)):
+async def join(request: Request):
     """
     Player sends:
     {
@@ -59,10 +55,6 @@ async def join(request: Request, x_api_key: Optional[str] = Header(None)):
         "frequency": 123.4
     }
     """
-    # Verify API key
-    if not x_api_key or x_api_key != API_KEY:
-        raise HTTPException(status_code=403, detail="Forbidden: Invalid or missing API key")
-    
     data = await request.json()
     username = data.get("username")
     level = data.get("level")
@@ -104,14 +96,10 @@ async def join(request: Request, x_api_key: Optional[str] = Header(None)):
         return {"message": "Player joined", "status": "new"}
 
 @app.get("/players")
-async def get_players(x_api_key: Optional[str] = Header(None)):
+async def get_players():
     """
     Return all current players
     """
-    # Verify API key
-    if not x_api_key or x_api_key != API_KEY:
-        raise HTTPException(status_code=403, detail="Forbidden: Invalid or missing API key")
-    
     return {"players": players}
 
 # Background task to remove inactive players
