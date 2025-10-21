@@ -38,8 +38,8 @@ async def join(request: Request, x_api_key: Optional[str] = Header(None)):
     }
     """
     # Verify API key
-    if x_api_key != API_KEY:
-        raise HTTPException(status_code=403, detail="Invalid or missing API key")
+    if not x_api_key or x_api_key != API_KEY:
+        raise HTTPException(status_code=403, detail="Forbidden: Invalid or missing API key")
     
     data = await request.json()
     username = data.get("username")
@@ -87,8 +87,8 @@ async def get_players(x_api_key: Optional[str] = Header(None)):
     Return all current players
     """
     # Verify API key
-    if x_api_key != API_KEY:
-        raise HTTPException(status_code=403, detail="Invalid or missing API key")
+    if not x_api_key or x_api_key != API_KEY:
+        raise HTTPException(status_code=403, detail="Forbidden: Invalid or missing API key")
     
     return {"players": players}
 
