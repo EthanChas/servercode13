@@ -36,7 +36,7 @@ players = {}
 shared_markers = {}
 
 INACTIVITY_TIMEOUT = 5 * 60  # 5 minutes
-MARKER_EXPIRY = 30 * 60  # 30 minutes for markers
+MARKER_EXPIRY = 5 * 60  # 30 minutes for markers
 
 # Middleware to block browsers
 @app.middleware("http")
