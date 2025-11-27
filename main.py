@@ -1,5 +1,5 @@
 # =========================================
-# Enhanced Player Server with Shared Markers/Pings
+# Enhanced Player Server with Shared Markers/Pings + Chat
 # =========================================
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -35,8 +35,19 @@ players = {}
 # )
 shared_markers = {}
 
+# Chat messages storage
+# message_id -> dict(
+#     username=str,
+#     frequency=float,
+#     message=str,
+#     timestamp=float,
+#     expires_at=float
+# )
+chat_messages = {}
+
 INACTIVITY_TIMEOUT = 5 * 60  # 5 minutes
-MARKER_EXPIRY = 5 * 60  # 30 minutes for markers
+MARKER_EXPIRY = 30 * 60  # 30 minutes for markers
+CHAT_EXPIRY = 5 * 60  # 5 minutes for chat messages
 
 # Middleware to block browsers
 @app.middleware("http")
@@ -222,7 +233,107 @@ async def clear_markers(username: str = None, frequency: float = None):
     
     return {"message": f"Cleared {len(to_remove)} markers", "status": "success"}
 
-# Background task to remove inactive players and expired markers
+# ============= CHAT ENDPOINTS =============
+
+@app.post("/chat/send")
+async def send_chat(request: Request):
+    """
+    Send a chat message
+    {
+        "username": "Ethan",
+        "frequency": 123.4,
+        "message": "Hello team!"
+    }
+    """
+    data = await request.json()
+    username = data.get("username")
+    frequency = data.get("frequency")
+    message = data.get("message")
+    
+    if not all([username, frequency is not None, message]):
+        return {"error": "Missing required fields"}
+    
+    # Limit message length
+    if len(message) > 200:
+        return {"error": "Message too long (max 200 characters)"}
+    
+    current_time = time.time()
+    message_id = str(uuid.uuid4())
+    
+    chat_messages[message_id] = {
+        "username": username,
+        "frequency": frequency,
+        "message": message,
+        "timestamp": current_time,
+        "expires_at": current_time + CHAT_EXPIRY
+    }
+    
+    print(f"[CHAT] {username} (F:{frequency}): {message}")
+    
+    return {
+        "message": "Chat message sent",
+        "message_id": message_id,
+        "status": "success"
+    }
+
+@app.get("/chat/get")
+async def get_chat(frequency: float = None):
+    """
+    Get all chat messages, optionally filtered by frequency
+    Query params: ?frequency=123.4
+    """
+    current_time = time.time()
+    
+    # Filter messages
+    filtered_messages = {}
+    for message_id, msg in chat_messages.items():
+        # Check expiry
+        if current_time > msg["expires_at"]:
+            continue
+        
+        # Filter by frequency
+        if frequency is not None and msg["frequency"] != frequency:
+            continue
+        
+        # Calculate age and fade progress
+        age = current_time - msg["timestamp"]
+        fade_start = CHAT_EXPIRY - 60  # Start fading 1 minute before expiry
+        
+        if age >= fade_start:
+            fade_progress = (age - fade_start) / 60  # 0.0 to 1.0 over 1 minute
+        else:
+            fade_progress = 0.0
+        
+        filtered_messages[message_id] = {
+            **msg,
+            "age": age,
+            "fade_progress": fade_progress
+        }
+    
+    return {"messages": filtered_messages}
+
+@app.delete("/chat/clear")
+async def clear_chat(frequency: float = None):
+    """
+    Clear chat messages by frequency
+    Query params: ?frequency=123.4
+    """
+    if frequency is None:
+        return {"error": "Must provide frequency"}
+    
+    to_remove = []
+    for message_id, msg in chat_messages.items():
+        if msg["frequency"] == frequency:
+            to_remove.append(message_id)
+    
+    for message_id in to_remove:
+        del chat_messages[message_id]
+    
+    print(f"[CHAT] Cleared {len(to_remove)} messages")
+    
+    return {"message": f"Cleared {len(to_remove)} messages", "status": "success"}
+
+# Background task to remove inactive players, expired markers, and expired chat
 async def cleanup_inactive():
     while True:
         now = time.time()
@@ -247,6 +358,16 @@ async def cleanup_inactive():
             del shared_markers[marker_id]
             print(f"[CLEANUP] Removed expired marker: {marker_id}")
         
+        # Remove expired chat messages
+        to_remove_chat = []
+        for message_id, msg in chat_messages.items():
+            if now > msg["expires_at"]:
+                to_remove_chat.append(message_id)
+        
+        for message_id in to_remove_chat:
+            del chat_messages[message_id]
+            print(f"[CLEANUP] Removed expired chat: {message_id}")
+        
         await asyncio.sleep(60)  # check every 60 seconds
 
 @app.on_event("startup")
@@ -264,6 +385,9 @@ async def root():
             "place_marker": "/markers/place",
             "get_markers": "/markers/get",
             "remove_marker": "/markers/remove/{marker_id}",
-            "clear_markers": "/markers/clear"
+            "clear_markers": "/markers/clear",
+            "send_chat": "/chat/send",
+            "get_chat": "/chat/get",
+            "clear_chat": "/chat/clear"
         }
     }
